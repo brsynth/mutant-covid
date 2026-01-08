@@ -1,0 +1,162 @@
+---
+title: "mutant"
+output: html_document
+---
+
+
+```{r}
+require(readxl)
+require(dplyr)
+require(tidyr)
+require(stringr)
+require(ggplot2)
+require(lme4)
+require(dplyr)
+require(mgcv)
+```
+
+```{r}
+file_path <- "A28 strain_12h.xlsx"
+file_name <- basename(file_path)
+file_stub <- tools::file_path_sans_ext(file_name)
+#groups_to_keep <- c("S", "M")   # change as needed
+groups_to_keep <- c("S", "M","N")
+
+raw_df <- read_excel(file_path)
+raw_df <- raw_df %>%
+  rename(time = 1)
+
+long_df <- raw_df %>%
+  pivot_longer(
+    cols = -time,
+    names_to = "raw_name",
+    values_to = "OD"
+  )
+
+print(raw_df)
+```
+
+```{r}
+
+gamm_df <- long_df %>%
+  mutate(
+    Group = str_extract(raw_name, "^[NMS]"),
+    patient = str_extract(raw_name, "(?<=^[NMS])\\d+"),
+    repetition = str_extract(raw_name, "(?<=Replicate\\s)\\d+")
+  ) %>%
+  mutate(
+    patient = as.factor(patient),
+    repetition = as.factor(repetition),
+    Group = as.factor(Group)
+  ) %>%
+  select(time, Group, patient, repetition, OD) %>%
+  filter(Group %in% groups_to_keep)
+
+str(gamm_df)
+```
+
+```{r}
+gamm_df <- gamm_df %>% filter(!is.na(OD))
+
+common_max_time <- gamm_df %>%
+  group_by(Group, patient, repetition) %>%
+  summarise(max_time = max(time, na.rm = TRUE), .groups = "drop") %>%
+  summarise(common_end = min(max_time)) %>%
+  pull(common_end)
+
+#common_max_time = 10
+
+gamm_df <- gamm_df %>%
+  filter(time <= common_max_time)%>%
+  group_by(Group, patient, time) %>%
+#   summarise(
+#     OD = mean(OD, na.rm = TRUE),
+#     .groups = "drop"
+#   )%>%
+  mutate(
+    Group = factor(Group, levels = c("N", "M", "S"), labels = c(1, 2, 2))
+  )
+
+gamm_df$Group <- as.ordered(gamm_df$Group) 
+contrasts(gamm_df$Group) <- 'contr.treatment'
+contrasts(gamm_df$Group)
+
+str(gamm_df)
+```
+
+```{r}
+library(mgcv)
+
+degree = 10
+
+model2 <- bam(
+  OD ~ Group + s(time, k = degree) + s(time, by = Group, k = degree),
+  random = list(patient = ~1),
+  data = gamm_df,
+  correlation=corARMA(form=~1|patient, p = 1) 
+)
+
+model3 <- bam(
+  OD ~ Group + s(time, k = degree) + s(time, by = Group, k = degree)
+        + s(time, patient, bs='re', m=1)
+        + s(repetition, patient, bs='re', m=1),
+  data = gamm_df,
+  correlation=corARMA(form=~1|patient, p = 1) 
+)
+
+#model1 <- gamm(
+#  OD ~ Group + s(time, k = degree) + s(time, by = Group, k = degree)
+#        + s(time, patient, bs='re', m=1)
+#        + s(repetition, patient, bs='re', m=1),
+#  data = gamm_df,
+#  correlation=corARMA(form=~1|patient, p = 1) 
+#)
+
+#gam.check(model1$gam)
+
+#anova(model1$lme,model2$lme)
+#anova(model2$lme,model3$lme)
+
+
+```
+
+```{r}
+summary(model2)
+print("---------------------------------------")
+summary(model3)
+
+```
+
+
+```{r}
+# plot the fitted model
+
+fitted_vals <- fitted(model3)
+
+
+fig1 <- ggplot(gamm_df, aes(time, OD, shape = Group)) +
+  stat_summary(fun.data = mean_se, geom = "pointrange") +
+  stat_summary(aes(y = fitted_vals, linetype = Group, color = Group),
+               fun = mean, geom = "line", size = 1.5) +
+  scale_color_manual(values = c("red", "blue", "green")) +
+  labs(
+    x = "Time (hours)",
+    y = "OD Value",
+    title = paste0("Negative vs Positive fits ",file_stub)) +
+  theme_minimal()
+print(fig1)
+ggsave(filename = paste0(file_stub,"_gamm_NP.jpeg"), plot = fig1, width = 8, height = 3, dpi = 900)
+```
+
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```

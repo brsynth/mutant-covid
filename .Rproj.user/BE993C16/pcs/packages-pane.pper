@@ -1,0 +1,7 @@
+{
+    "installOptions" : {
+        "installDependencies" : true,
+        "installFromRepository" : true,
+        "libraryPath" : "C:/Users/tnhoang/AppData/Local/Programs/R/R-4.4.3/library"
+    }
+}
