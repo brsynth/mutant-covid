@@ -16,11 +16,11 @@ require(mgcv)
 ```
 
 ```{r}
-file_path <- "A28 strain_12h.xlsx"
+file_path <- "A0 strain.xlsx"
 file_name <- basename(file_path)
 file_stub <- tools::file_path_sans_ext(file_name)
-#groups_to_keep <- c("S", "M")   # change as needed
-groups_to_keep <- c("S", "M","N")
+groups_to_keep <- c("S", "M","N")   # change as needed
+#groups_to_keep <- c("S", "M","N")
 
 raw_df <- read_excel(file_path)
 raw_df <- raw_df %>%
@@ -41,7 +41,7 @@ print(raw_df)
 gamm_df <- long_df %>%
   mutate(
     Group = str_extract(raw_name, "^[NMS]"),
-    patient = str_extract(raw_name, "(?<=^[NMS])\\d+"),
+    patient = str_extract(raw_name,"^[NMS]\\d+"),
     repetition = str_extract(raw_name, "(?<=Replicate\\s)\\d+")
   ) %>%
   mutate(
