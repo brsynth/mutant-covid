@@ -1,14 +1,18 @@
 import pandas as pd
-
+import os
 import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader
+torch.set_num_threads(os.cpu_count())
+torch.set_num_interop_threads(os.cpu_count())
+
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import balanced_accuracy_score, precision_score, confusion_matrix
 
 def load_and_process_od_data(
     filepath,
     sheet_name=0,
-    group_map={"N": 0, "M": 1, "S": 2}
+    group_map={"N": 2, "M": 1, "S": 0}
 ):
     """
     Load OD data from Excel and reshape it for CNN-style modeling.
@@ -79,11 +83,8 @@ def load_and_process_od_data(
         [c for c in df_cnn.columns if c not in meta_cols],
         key=lambda x: float(x)
     )
-
-    return df_cnn[meta_cols + time_cols]
-
-
-
+    df_cnn = df_cnn[meta_cols + time_cols]
+    return df_cnn[df_cnn["group"] != 2]
 
 
 class TimeSeriesDataset(Dataset):
@@ -166,14 +167,32 @@ def train_epoch(model, loader, optimizer, criterion, device):
 
 def eval_accuracy(model, loader, device):
     model.eval()
-    correct, total = 0, 0
+    y_true, y_pred = [], []
     with torch.no_grad():
         for Xb, yb in loader:
             Xb, yb = Xb.to(device), yb.to(device)
             preds = model(Xb).argmax(1)
-            correct += (preds == yb).sum().item()
-            total += yb.size(0)
-    return correct / total
+            y_true.extend(yb.cpu().numpy())
+            y_pred.extend(preds.cpu().numpy())
+    balanced_accuaracy = balanced_accuracy_score(y_true, y_pred)
+    macro_precision = precision_score(
+    y_true,
+    y_pred,
+    average="macro",
+    zero_division=0
+)
+    cm = confusion_matrix(y_true, y_pred)
+    num_classes = cm.shape[0]
+
+    specificities = []
+    for i in range(num_classes):
+        TN = cm.sum() - (cm[i, :].sum() + cm[:, i].sum() - cm[i, i])
+        FP = cm[:, i].sum() - cm[i, i]
+        specificity = TN / (TN + FP) if (TN + FP) > 0 else 0
+        specificities.append(specificity)
+    macro_specificity = np.mean(specificities)  
+
+    return balanced_accuaracy, macro_precision, macro_specificity
 
 def run_experiment(
     ModelClass,
@@ -186,22 +205,21 @@ def run_experiment(
 ):
     device = "cuda" if torch.cuda.is_available() else "cpu"
     n_classes = len(np.unique(y))
-    accs = []
+    print(n_classes)
+    accs, precs, specs = [], [], []
 
     patients = np.array(patients)
     unique_patients = np.unique(patients)
 
     for _ in range(runs):
 
-        # Split by patient (not by repetition)
         train_patients, test_patients = train_test_split(
             unique_patients,
             test_size=test_size,
-            random_state=42,
-            stratify=None,   # optional: see note below
+            random_state=None,
+            stratify=None,  
         )
 
-        # Mask samples belonging to selected patients
         train_mask = np.isin(patients, train_patients)
         test_mask  = np.isin(patients, test_patients)
 
@@ -221,12 +239,14 @@ def run_experiment(
         for _ in range(epochs):
             train_epoch(model, train_loader, optimizer, criterion, device)
 
-        acc = eval_accuracy(model, test_loader, device)
-        accs.append(acc)
+        balanced_accuaracy, macro_precision, macro_specificity = eval_accuracy(model, test_loader, device)
+        accs.append(balanced_accuaracy)
+        precs.append(macro_precision)
+        specs.append(macro_specificity)
 
-    return np.array(accs)
+    return np.array(accs), np.array(precs), np.array(specs)
 
-
+    
 import glob
 
 excel_files = [
@@ -237,9 +257,9 @@ for file in excel_files:
 
     df = load_and_process_od_data(file)
     # Extract from DataFrame
-    y = df.iloc[:, 2].values          # labels
-    X = df.iloc[:, 3:].values         # time series
-    patients = df.iloc[:, 1].values   # patient IDs
+    y = df.iloc[:, 2].values          
+    X = df.iloc[:, 3:].values         
+    patients = df.iloc[:, 1].values   
 
     # Convert to float32
     X = X.astype(np.float32)
@@ -248,12 +268,23 @@ for file in excel_files:
     # Add channel dimension: (samples, channels, time)
     X = X[:, np.newaxis, :]
 
-    cnn_acc  = run_experiment(CNN1D, X, y, patients)
-    lstm_acc = run_experiment(LSTMNet, X, y, patients)
-    tcn_acc  = run_experiment(TCN, X, y, patients)
+    cnn_acc, cnn_prec, cnn_spec = run_experiment(CNN1D, X, y, patients)
+    lstm_acc, lstm_prec, lstm_spec = run_experiment(LSTMNet, X, y, patients)
+    tcn_acc, tcn_prec, tcn_spec = run_experiment(TCN, X, y, patients)
 
-    print(f"CNN  : {cnn_acc.mean():.3f} ± {cnn_acc.std():.3f}")
-    print(f"LSTM : {lstm_acc.mean():.3f} ± {lstm_acc.std():.3f}")
-    print(f"TCN  : {tcn_acc.mean():.3f} ± {tcn_acc.std():.3f}")
+    print(f"Results for file: {file}")
+    print("CNN:"
+          f" Acc: {cnn_acc.mean():.3f} ± {cnn_acc.std():.3f},"
+          f" Prec: {cnn_prec.mean():.3f} ± {cnn_prec.std():.3f},"
+          f" Spec: {cnn_spec.mean():.3f} ± {cnn_spec.std():.3f}"  )
+    print("LSTM:"
+          f" Acc: {lstm_acc.mean():.3f} ± {lstm_acc.std():.3f},"
+          f" Prec: {lstm_prec.mean():.3f} ± {lstm_prec.std():.3f},"
+          f" Spec: {lstm_spec.mean():.3f} ± {lstm_spec.std():.3f}"  )
+    print("TCN:"           
+          f" Acc: {tcn_acc.mean():.3f} ± {tcn_acc.std():.3f},"
+          f" Prec: {tcn_prec.mean():.3f} ± {tcn_prec.std():.3f},"
+          f" Spec: {tcn_spec.mean():.3f} ± {tcn_spec.std():.3f}"  )
+
 
 
