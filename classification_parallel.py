@@ -12,8 +12,8 @@ from sklearn.metrics import balanced_accuracy_score, precision_score, confusion_
 import ray
 ray.init(ignore_reinit_error=True)
 
-case = "N_vs_P"  # Options: "all", "N_vs_P", "M_vs_S"
-result_name = f"classification_result/balanced_acc, marco_precision, macro_specificity_classification_{case}.csv"
+case = "all"  # Options: "all", "N_vs_P", "M_vs_S"
+result_name = f"classification_result/baseline_{case}.csv"
 
 case_dict = {
     "all": {
@@ -383,7 +383,7 @@ for file in excel_files:
     # "TCN acc": tcn_acc.mean(),
     # "TCN std acc": tcn_acc.std(),
     # })
-    
+    ray.shutdown()
     ray.init()
 
     X_ref = ray.put(X)
@@ -431,6 +431,8 @@ for file in excel_files:
     tcn_prec = np.array(metrics["TCN_prec"])
     tcn_spec = np.array(metrics["TCN_spec"])
 
+    ray.shutdown()
+
     print(f"Results for file: {file}")
     print("CNN:"
           f" Acc: {cnn_acc.mean():.3f} ± {cnn_acc.std():.3f},"
@@ -446,6 +448,8 @@ for file in excel_files:
           f" Spec: {tcn_spec.mean():.3f} ± {tcn_spec.std():.3f}"  )
     
     rows.append({
+    "case": case,
+    
     "File": os.path.splitext(os.path.basename(file))[0],
 
     "CNN acc": cnn_acc.mean(),
@@ -456,7 +460,26 @@ for file in excel_files:
 
     "TCN acc": tcn_acc.mean(),
     "TCN std acc": tcn_acc.std(),
+
+    "CNN prec": cnn_prec.mean(),
+    "CNN std prec": cnn_prec.std(),
+
+    "LSTM prec": lstm_prec.mean(),
+    "LSTM std prec": lstm_prec.std(),
+
+    "TCN prec": tcn_prec.mean(),
+    "TCN std prec": tcn_prec.std(),
+
+    "CNN spec": cnn_spec.mean(),
+    "CNN std spec": cnn_spec.std(),     
+
+    "LSTM spec": lstm_spec.mean(),
+    "LSTM std spec": lstm_spec.std(),
+
+    "TCN spec": tcn_spec.mean(),            
+    "TCN std spec": tcn_spec.std(),
     })
+
 
 df = pd.DataFrame(rows)
 
