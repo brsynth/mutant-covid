@@ -1,5 +1,8 @@
 import pandas as pd
 import os
+os.environ["RAY_DISABLE_METRICS"] = "1"
+os.environ["RAY_DISABLE_USAGE_STATS"] = "1"
+
 import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader
@@ -10,10 +13,10 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import balanced_accuracy_score, precision_score, confusion_matrix
 
 import ray
-ray.init(ignore_reinit_error=True)
+ray.init(include_dashboard=False, logging_level="ERROR")
 
-case = "all"  # Options: "all", "N_vs_P", "M_vs_S"
-result_name = f"classification_result/baseline_{case}.csv"
+case = "M_vs_S"  # Options: "all", "N_vs_P", "M_vs_S"
+result_name = f"classification_result/A1_A15_A5_1e-3_{case}.csv"
 
 case_dict = {
     "all": {
@@ -212,7 +215,7 @@ def run_experiment(
     y,
     patients,
     runs=100,
-    epochs=30,
+    epochs=100,
     test_size=0.2
 ):
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -240,7 +243,7 @@ def run_experiment(
         train_ds = TimeSeriesDataset(X_tr, y_tr)
         test_ds  = TimeSeriesDataset(X_te, y_te)
 
-        train_loader = DataLoader(train_ds, batch_size=16, shuffle=True)
+        train_loader = DataLoader(train_ds, batch_size=128, shuffle=True)
         test_loader  = DataLoader(test_ds, batch_size=32)
 
         model = ModelClass(n_classes).to(device)
@@ -262,7 +265,7 @@ def run_single_run(
     X,
     y,
     patients,
-    epochs=30,
+    epochs=100,
     test_size=0.2,
 ):
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -287,7 +290,7 @@ def run_single_run(
     train_ds = TimeSeriesDataset(X_tr, y_tr)
     test_ds  = TimeSeriesDataset(X_te, y_te)
 
-    train_loader = DataLoader(train_ds, batch_size=16, shuffle=True)
+    train_loader = DataLoader(train_ds, batch_size=128, shuffle=True)
     test_loader  = DataLoader(test_ds, batch_size=32)
 
     model = ModelClass(n_classes).to(device)
@@ -305,7 +308,7 @@ def run_single_run_ray(
     X,
     y,
     patients,
-    epochs=30,
+    epochs=100,
     test_size=0.2,
 ):
     import os
@@ -327,7 +330,6 @@ def run_single_run_ray(
         test_size,
     )
 
-
     
 import glob
 from collections import defaultdict
@@ -336,22 +338,52 @@ excel_files = [
     f for f in glob.glob("*.xlsx") if not f.startswith("~$")
 ]
 
+excel_files = ["A1 strain.xlsx", "A15 strain.xlsx", "A5 strain.xlsx"]
+
+X_all, y_all, patients_all = [], [], []
 rows = []
+lengths = []
+
+n_cols = None
 
 for file in excel_files:
-
     df = load_and_process_od_data(file)
-    # Extract from DataFrame
-    y = df.iloc[:, 2].values          
-    X = df.iloc[:, 3:].values         
-    patients = df.iloc[:, 1].values   
+    X = df.iloc[:, 3:].values
+    n_cols = X.shape[1] if n_cols is None else min(n_cols, X.shape[1])
 
-    # Convert to float32
-    X = X.astype(np.float32)
-    y = y.astype(np.int64)
+print("Using common columns:", n_cols)
 
-    # Add channel dimension: (samples, channels, time)
-    X = X[:, np.newaxis, :]
+# 2️⃣ Load again and keep ONLY common columns
+for file in excel_files:
+    df = load_and_process_od_data(file)
+
+    y = df.iloc[:, 2].values
+    X = df.iloc[:, 3:].values[:, :n_cols]   # ✔ column intersection
+    patients = df.iloc[:, 1].values
+
+    X_all.append(X)
+    y_all.append(y)
+    patients_all.append(patients)
+
+# 3️⃣ Stack rows
+X = np.concatenate(X_all, axis=0)
+y = np.concatenate(y_all, axis=0)
+patients = np.concatenate(patients_all, axis=0)
+
+# ✅ Remove columns with ANY NaN (after concatenation)
+valid_cols = ~np.isnan(X).any(axis=0)
+X = X[:, valid_cols]
+
+# ✅ Your original normalization
+normalize_value = X.max()
+X = X / normalize_value
+
+# ✅ Convert types
+X = X.astype(np.float32)
+y = y.astype(np.int64)
+
+# ✅ Add channel dimension
+X = X[:, np.newaxis, :]
 
     # cnn_acc, cnn_prec, cnn_spec = run_experiment(CNN1D, X, y, patients)
     # lstm_acc, lstm_prec, lstm_spec = run_experiment(LSTMNet, X, y, patients)
@@ -383,102 +415,102 @@ for file in excel_files:
     # "TCN acc": tcn_acc.mean(),
     # "TCN std acc": tcn_acc.std(),
     # })
-    ray.shutdown()
-    ray.init()
+ray.shutdown()
+ray.init(include_dashboard=False, logging_level="ERROR")
 
-    X_ref = ray.put(X)
-    y_ref = ray.put(y)
-    patients_ref = ray.put(patients)
+X_ref = ray.put(X)
+y_ref = ray.put(y)
+patients_ref = ray.put(patients)
 
-    models = [CNN1D, LSTMNet, TCN]
-    runs = 100
+models = [CNN1D, LSTMNet, TCN]
+runs = 100
 
-    futures = []
+futures = []
 
-    for model in models:
-        for _ in range(runs):
-            futures.append(
-                run_single_run_ray.remote(
-                    model,
-                    X_ref,
-                    y_ref,
-                    patients_ref,
-                )
+for model in models:
+    for _ in range(runs):
+        futures.append(
+            run_single_run_ray.remote(
+                model,
+                X_ref,
+                y_ref,
+                patients_ref,
             )
+        )
 
-    results = ray.get(futures)
+results = ray.get(futures)
 
-    
-    metrics = defaultdict(list)
 
-    for model, (acc, prec, spec) in zip(
-            [m for m in models for _ in range(runs)],
-            results):
+metrics = defaultdict(list)
 
-        metrics[model.__name__ + "_acc"].append(acc)
-        metrics[model.__name__ + "_prec"].append(prec)
-        metrics[model.__name__ + "_spec"].append(spec)
+for model, (acc, prec, spec) in zip(
+        [m for m in models for _ in range(runs)],
+        results):
 
-    cnn_acc = np.array(metrics["CNN1D_acc"])
-    cnn_prec = np.array(metrics["CNN1D_prec"])
-    cnn_spec = np.array(metrics["CNN1D_spec"])
+    metrics[model.__name__ + "_acc"].append(acc)
+    metrics[model.__name__ + "_prec"].append(prec)
+    metrics[model.__name__ + "_spec"].append(spec)
 
-    lstm_acc = np.array(metrics["LSTMNet_acc"])
-    lstm_prec = np.array(metrics["LSTMNet_prec"])
-    lstm_spec = np.array(metrics["LSTMNet_spec"])
+cnn_acc = np.array(metrics["CNN1D_acc"])
+cnn_prec = np.array(metrics["CNN1D_prec"])
+cnn_spec = np.array(metrics["CNN1D_spec"])
 
-    tcn_acc = np.array(metrics["TCN_acc"])
-    tcn_prec = np.array(metrics["TCN_prec"])
-    tcn_spec = np.array(metrics["TCN_spec"])
+lstm_acc = np.array(metrics["LSTMNet_acc"])
+lstm_prec = np.array(metrics["LSTMNet_prec"])
+lstm_spec = np.array(metrics["LSTMNet_spec"])
 
-    ray.shutdown()
+tcn_acc = np.array(metrics["TCN_acc"])
+tcn_prec = np.array(metrics["TCN_prec"])
+tcn_spec = np.array(metrics["TCN_spec"])
 
-    print(f"Results for file: {file}")
-    print("CNN:"
-          f" Acc: {cnn_acc.mean():.3f} ± {cnn_acc.std():.3f},"
-          f" Prec: {cnn_prec.mean():.3f} ± {cnn_prec.std():.3f},"
-          f" Spec: {cnn_spec.mean():.3f} ± {cnn_spec.std():.3f}"  )
-    print("LSTM:"
-          f" Acc: {lstm_acc.mean():.3f} ± {lstm_acc.std():.3f},"
-          f" Prec: {lstm_prec.mean():.3f} ± {lstm_prec.std():.3f},"
-          f" Spec: {lstm_spec.mean():.3f} ± {lstm_spec.std():.3f}"  )
-    print("TCN:"           
-          f" Acc: {tcn_acc.mean():.3f} ± {tcn_acc.std():.3f},"
-          f" Prec: {tcn_prec.mean():.3f} ± {tcn_prec.std():.3f},"
-          f" Spec: {tcn_spec.mean():.3f} ± {tcn_spec.std():.3f}"  )
-    
-    rows.append({
-    "case": case,
-    
-    "File": os.path.splitext(os.path.basename(file))[0],
+ray.shutdown()
 
-    "CNN acc": cnn_acc.mean(),
-    "CNN std acc": cnn_acc.std(),
+print(f"Results for file: {file}")
+print("CNN:"
+        f" Acc: {cnn_acc.mean():.3f} ± {cnn_acc.std():.3f},"
+        f" Prec: {cnn_prec.mean():.3f} ± {cnn_prec.std():.3f},"
+        f" Spec: {cnn_spec.mean():.3f} ± {cnn_spec.std():.3f}"  )
+print("LSTM:"
+        f" Acc: {lstm_acc.mean():.3f} ± {lstm_acc.std():.3f},"
+        f" Prec: {lstm_prec.mean():.3f} ± {lstm_prec.std():.3f},"
+        f" Spec: {lstm_spec.mean():.3f} ± {lstm_spec.std():.3f}"  )
+print("TCN:"           
+        f" Acc: {tcn_acc.mean():.3f} ± {tcn_acc.std():.3f},"
+        f" Prec: {tcn_prec.mean():.3f} ± {tcn_prec.std():.3f},"
+        f" Spec: {tcn_spec.mean():.3f} ± {tcn_spec.std():.3f}"  )
 
-    "LSTM acc": lstm_acc.mean(),
-    "LSTM std acc": lstm_acc.std(),
+rows.append({
+"case": case,
 
-    "TCN acc": tcn_acc.mean(),
-    "TCN std acc": tcn_acc.std(),
+"File": os.path.splitext(os.path.basename(file))[0],
 
-    "CNN prec": cnn_prec.mean(),
-    "CNN std prec": cnn_prec.std(),
+"CNN acc": cnn_acc.mean(),
+"CNN std acc": cnn_acc.std(),
 
-    "LSTM prec": lstm_prec.mean(),
-    "LSTM std prec": lstm_prec.std(),
+"LSTM acc": lstm_acc.mean(),
+"LSTM std acc": lstm_acc.std(),
 
-    "TCN prec": tcn_prec.mean(),
-    "TCN std prec": tcn_prec.std(),
+"TCN acc": tcn_acc.mean(),
+"TCN std acc": tcn_acc.std(),
 
-    "CNN spec": cnn_spec.mean(),
-    "CNN std spec": cnn_spec.std(),     
+"CNN prec": cnn_prec.mean(),
+"CNN std prec": cnn_prec.std(),
 
-    "LSTM spec": lstm_spec.mean(),
-    "LSTM std spec": lstm_spec.std(),
+"LSTM prec": lstm_prec.mean(),
+"LSTM std prec": lstm_prec.std(),
 
-    "TCN spec": tcn_spec.mean(),            
-    "TCN std spec": tcn_spec.std(),
-    })
+"TCN prec": tcn_prec.mean(),
+"TCN std prec": tcn_prec.std(),
+
+"CNN spec": cnn_spec.mean(),
+"CNN std spec": cnn_spec.std(),     
+
+"LSTM spec": lstm_spec.mean(),
+"LSTM std spec": lstm_spec.std(),
+
+"TCN spec": tcn_spec.mean(),            
+"TCN std spec": tcn_spec.std(),
+})
 
 
 df = pd.DataFrame(rows)
