@@ -14,6 +14,9 @@ from sklearn.model_selection import StratifiedKFold
 import ray
 import optuna
 
+#TO do: add patient when split for validation
+# tune model with hyperparameter?
+
 class TimeSeriesDataset(Dataset):
     def __init__(self, X, y):
         self.X = torch.tensor(X)
@@ -26,7 +29,7 @@ class TimeSeriesDataset(Dataset):
         return self.X[idx], self.y[idx]
 
 class CNN1D(nn.Module):
-    def __init__(self, in_channels, num_classes, k1, k2, dropout):
+    def __init__(self, in_channels, num_classes, k1, k2, dropout=0.3):
         super().__init__()
 
         self.conv1 = nn.Conv1d(
@@ -103,7 +106,7 @@ class TCNBlock(nn.Module):
         return F.gelu(out + res)
 
 class TCN(nn.Module):
-    def __init__(self, in_channels, num_classes, k1, k2, dropout):
+    def __init__(self, in_channels, num_classes, k1, k2, dropout=0.3):
         super().__init__()
 
         self.block1 = TCNBlock(
@@ -146,7 +149,6 @@ def eval_accuracy(model, loader):
         for Xb, yb in loader:
             logits = model(Xb)
             preds = logits.argmax(dim=1)
-
             y_true.extend(yb.numpy())
             y_pred.extend(preds.numpy())
     balanced_accuracy = balanced_accuracy_score(y_true, y_pred)
@@ -171,29 +173,31 @@ def eval_accuracy(model, loader):
 
 
 ##### OPTUNA
-def inner_objective(trial, X_train, y_train, patients):
+def inner_objective(trial, X_train, y_train, ModelClass = None):
 
-    model_type = trial.suggest_categorical(
-        "model_type", ["cnn", "tcn"]
-    )
-
-    # ---- shared hyperparameters ----
-    lr = trial.suggest_float("lr", 5e-1, 1e-3, log=True)
-    weight_decay = trial.suggest_float("wd", 1e-4, 1e-2, log=True)
-    dropout = trial.suggest_float("dropout", 0.1, 0.4)
+   # ---- shared hyperparameters ----
+    lr = trial.suggest_float("lr", 1e-3, 5e-1, log=True)
+    # weight_decay = trial.suggest_float("wd", 1e-4, 1e-2, log=True)
+    # dropout = trial.suggest_float("dropout", 0.1, 0.4)
     k1 = trial.suggest_int("k1", 7, 15, step=2)
     k2 = trial.suggest_int("k2", 7, 15, step=2)
 
-    # ---- model-specific branches ----
-    if model_type == "cnn":
-        ModelClass = lambda in_ch, num_cl: CNN1D(in_ch, num_cl, k1, k2, dropout)
-    elif model_type == "tcn":  # ---- TCN ----
-        ModelClass = lambda in_ch, num_cl: TCN(in_ch, num_cl, k1, k2, dropout)
+    # # ---- model-specific branches ----
+    # if model_type == "CNN1D":
+    #     ModelClass = CNN1D
+    # elif model_type == "TCN":  # ---- TCN ----
+    #     ModelClass = TCN
+    # else:
+    #     raise ValueError(f"Unknown model_type: {model_type}")
+    
 
     skf = StratifiedKFold(n_splits=3, shuffle=True, random_state=0)
     scores = []
 
     for fold, (tr_idx, val_idx) in enumerate(skf.split(X_train, y_train)):
+        # print(f"Trial {trial.number} - Fold {fold+1}")
+        # print(f"  Hyperparameters: lr={lr}, k1={k1}, k2={k2}")
+        # print(f"  Train indices: {tr_idx}, Validation indices: {val_idx}")
         X_tr, y_tr = X_train[tr_idx], y_train[tr_idx]
         X_val, y_val = X_train[val_idx], y_train[val_idx]
 
@@ -206,12 +210,12 @@ def inner_objective(trial, X_train, y_train, patients):
         in_channels = X_tr.shape[1]
         num_classes = len(np.unique(y_tr))
 
-        model = ModelClass(in_channels, num_classes)
+        model = ModelClass(in_channels, num_classes, k1, k2)
 
         optimizer = torch.optim.Adam(
             model.parameters(),
             lr=lr,
-            weight_decay=weight_decay
+            weight_decay=5e-3
         )
         criterion = nn.CrossEntropyLoss(label_smoothing=0.15)
 
@@ -231,16 +235,14 @@ def build_model_from_params(
     params,
     in_channels,
     num_classes,
+    ModelClass = None,
 ):
-    model_type = params["model_type"]
+
     k1 = params["k1"]
     k2 = params["k2"]
-    dropout = params["dropout"]
 
-    if model_type == "cnn":
-        model = CNN1D(in_channels, num_classes, k1, k2, dropout)
-    elif model_type == "tcn":
-        model = TCN(in_channels, num_classes, k1, k2, dropout)
+    model = ModelClass(in_channels, num_classes, k1, k2)
+
     return model
 
 def run_single_run(
@@ -249,7 +251,7 @@ def run_single_run(
     y,
     patients,
     epochs= 50,
-    lr = 0.001, batch = 64,
+    batch = 64,
     test_size=0.2,
 ):
     in_channels = X.shape[1]
@@ -270,10 +272,13 @@ def run_single_run(
 
     X_tr, y_tr = X[train_mask], y[train_mask]
     X_te, y_te = X[test_mask],  y[test_mask]
+    patients_tr = patients[train_mask]
+    print(f"train patients: {train_patients}")
+    print(f" patients_fr: {patients_tr}")
 
     study = optuna.create_study(
     direction="maximize",
-    sampler=optuna.samplers.TPESampler(seed=42),
+    sampler=optuna.samplers.TPESampler(),
     pruner=optuna.pruners.MedianPruner(
         n_startup_trials=5,
         n_warmup_steps=1,
@@ -285,8 +290,7 @@ def run_single_run(
             t,
             X_tr,
             y_tr,
-            patients_tr,
-            in_channels=X_tr.shape[1],
+            ModelClass,
         ),
         n_trials=30,
     )
@@ -297,6 +301,7 @@ def run_single_run(
         best_params,        
         in_channels,
         num_classes,
+        ModelClass=ModelClass,
     )
 
     train_ds = TimeSeriesDataset(X_tr, y_tr)
@@ -307,7 +312,7 @@ def run_single_run(
 
     optimizer = torch.optim.Adam(model.parameters(), 
                                  lr=best_params["lr"],
-                                 weight_decay=best_params["wd"])
+                                 weight_decay=5e-3)
     
     criterion = nn.CrossEntropyLoss(label_smoothing=0.15)
 
@@ -323,7 +328,6 @@ def run_single_run_ray(
     y,
     patients,
     epochs=50,
-    lr=0.001,
     batch=64,
     test_size=0.2,
 ):
@@ -343,7 +347,6 @@ def run_single_run_ray(
         y,
         patients,
         epochs = epochs,
-        lr = lr,
         batch = batch,
         test_size=test_size,
     )
