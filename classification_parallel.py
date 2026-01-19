@@ -9,11 +9,11 @@ import numpy as np
 from model import *
 
 case = "M_vs_S"  # Options: "all", "N_vs_P", "M_vs_S"
-lr = 1e-2
-epochs = 100
+epochs = 160
 batch = 128
-kernal_size= "kernel_8_15"
-result_name = f"classification_result/CNN_{case}_{lr}_{epochs}_{batch}_{kernal_size}.csv"
+kernal_size= "optuna"
+runs = 50
+result_name = f"classification_result/CNN_{case}_{epochs}_{batch}_{kernal_size}.csv"
 
 case_dict = {
     "all": {
@@ -109,7 +109,7 @@ excel_files = [
     f for f in glob.glob("*.xlsx") if not f.startswith("~$")
 ]
 
-# excel_files = ["A15 strain.xlsx"]
+excel_files = ["A15 strain.xlsx"]
 
 X_all, y_all, patients_all = [], [], []
 rows = []
@@ -165,7 +165,6 @@ for file in excel_files:
     patients_ref = ray.put(patients)
 
     models = [CNN1D]  # LSTMNet, TCN
-    runs = 100
 
     futures = []
 
@@ -178,7 +177,7 @@ for file in excel_files:
                     y_ref,
                     patients_ref,
                     epochs=epochs,
-                    lr=lr, batch=batch,
+                    batch=batch,
                 )
             )
 
