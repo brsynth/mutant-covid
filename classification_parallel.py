@@ -8,12 +8,13 @@ import numpy as np
 
 from model import *
 
-case = "M_vs_S"  # Options: "all", "N_vs_P", "M_vs_S"
+strain = None
+case = "N_vs_P"  # Options: "all", "N_vs_P", "M_vs_S"
 epochs = 160
 batch = 128
 kernal_size= "optuna"
 runs = 50
-result_name = f"classification_result/CNN_{case}_{epochs}_{batch}_{kernal_size}.csv"
+result_name = f"classification_result/{strain}_CNN_TCN_{case}_{epochs}_{batch}_{kernal_size}.csv"
 
 case_dict = {
     "all": {
@@ -106,10 +107,13 @@ import glob
 from collections import defaultdict
 
 excel_files = [
-    f for f in glob.glob("*.xlsx") if not f.startswith("~$")
+    f for f in glob.glob("time serie/*.xlsx") if not f.startswith("~$")
 ]
 
-excel_files = ["A15 strain.xlsx"]
+if strain == None:
+    pass
+else:
+    excel_files = [f"time serie/{strain} strain.xlsx"]
 
 X_all, y_all, patients_all = [], [], []
 rows = []
@@ -146,15 +150,19 @@ for file in excel_files:
 # valid_cols = ~np.isnan(X).any(axis=0)
 # X = X[:, valid_cols]
 
-    # ✅ Your original normalization
-    normalize_value = X.max()
-    X = X / normalize_value
+    # # ✅ Your original normalization
+    # normalize_value = X.max()
+    # X = X / normalize_value
 
-    # ✅ Convert types
+    X_mean = np.mean(X, axis=1, keepdims=True)
+    X_std = np.std(X, axis=1, keepdims=True)
+
+    # Add a small epsilon to avoid division by zero if a signal is perfectly flat
+    X = (X - X_mean) / (X_std + 1e-8)
+
+    # 4. Convert types and add channel dimension
     X = X.astype(np.float32)
     y = y.astype(np.int64)
-
-    # ✅ Add channel dimension
     X = X[:, np.newaxis, :]
 
     ray.shutdown()
@@ -164,7 +172,7 @@ for file in excel_files:
     y_ref = ray.put(y)
     patients_ref = ray.put(patients)
 
-    models = [CNN1D]  # LSTMNet, TCN
+    models = [CNN1D, TCN]  # LSTMNet, TCN
 
     futures = []
 
@@ -194,17 +202,15 @@ for file in excel_files:
         metrics[model.__name__ + "_prec"].append(prec)
         metrics[model.__name__ + "_spec"].append(spec)
 
+
     cnn_acc = np.array(metrics["CNN1D_acc"])
     cnn_prec = np.array(metrics["CNN1D_prec"])
     cnn_spec = np.array(metrics["CNN1D_spec"])
 
-    # lstm_acc = np.array(metrics["LSTMNet_acc"])
-    # lstm_prec = np.array(metrics["LSTMNet_prec"])
-    # lstm_spec = np.array(metrics["LSTMNet_spec"])
 
-    # tcn_acc = np.array(metrics["TCN_acc"])
-    # tcn_prec = np.array(metrics["TCN_prec"])
-    # tcn_spec = np.array(metrics["TCN_spec"])
+    tcn_acc = np.array(metrics["TCN_acc"])
+    tcn_prec = np.array(metrics["TCN_prec"])
+    tcn_spec = np.array(metrics["TCN_spec"])
 
     ray.shutdown()
 
@@ -213,14 +219,11 @@ for file in excel_files:
             f" Acc: {cnn_acc.mean():.3f} ± {cnn_acc.std():.3f},"
             f" Prec: {cnn_prec.mean():.3f} ± {cnn_prec.std():.3f},"
             f" Spec: {cnn_spec.mean():.3f} ± {cnn_spec.std():.3f}"  )
-    # print("LSTM:"
-    #         f" Acc: {lstm_acc.mean():.3f} ± {lstm_acc.std():.3f},"
-    #         f" Prec: {lstm_prec.mean():.3f} ± {lstm_prec.std():.3f},"
-    #         f" Spec: {lstm_spec.mean():.3f} ± {lstm_spec.std():.3f}"  )
-    # print("TCN:"           
-    #         f" Acc: {tcn_acc.mean():.3f} ± {tcn_acc.std():.3f},"
-    #         f" Prec: {tcn_prec.mean():.3f} ± {tcn_prec.std():.3f},"
-    #         f" Spec: {tcn_spec.mean():.3f} ± {tcn_spec.std():.3f}"  )
+
+    print("TCN:"           
+            f" Acc: {tcn_acc.mean():.3f} ± {tcn_acc.std():.3f},"
+            f" Prec: {tcn_prec.mean():.3f} ± {tcn_prec.std():.3f},"
+            f" Spec: {tcn_spec.mean():.3f} ± {tcn_spec.std():.3f}"  )
 
     rows.append({
     "case": case,
@@ -233,8 +236,8 @@ for file in excel_files:
     # "LSTM acc": lstm_acc.mean(),
     # "LSTM std acc": lstm_acc.std(),
 
-    # "TCN acc": tcn_acc.mean(),
-    # "TCN std acc": tcn_acc.std(),
+    "TCN acc": tcn_acc.mean(),
+    "TCN std acc": tcn_acc.std(),
 
     "CNN prec": cnn_prec.mean(),
     "CNN std prec": cnn_prec.std(),
@@ -242,8 +245,9 @@ for file in excel_files:
     # "LSTM prec": lstm_prec.mean(),
     # "LSTM std prec": lstm_prec.std(),
 
-    # "TCN prec": tcn_prec.mean(),
-    # "TCN std prec": tcn_prec.std(),
+    "TCN prec": tcn_prec.mean(),
+    "TCN std prec": tcn_prec.std(),
+
 
     "CNN spec": cnn_spec.mean(),
     "CNN std spec": cnn_spec.std(),     
@@ -251,8 +255,8 @@ for file in excel_files:
     # "LSTM spec": lstm_spec.mean(),
     # "LSTM std spec": lstm_spec.std(),
 
-    # "TCN spec": tcn_spec.mean(),            
-    # "TCN std spec": tcn_spec.std(),
+    "TCN spec": tcn_spec.mean(),            
+    "TCN std spec": tcn_spec.std(),
     })
 
 
