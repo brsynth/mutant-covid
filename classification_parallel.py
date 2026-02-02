@@ -8,12 +8,13 @@ import numpy as np
 
 from model import *
 
-strain = None
+strain = None # ["A1","A15",...]
 case = "N_vs_P"  # Options: "all", "N_vs_P", "M_vs_S"
 epochs = 160
 batch = 128
-kernal_size= "optuna"
+kernal_size= "optuna" # auto select hyperparameters
 runs = 50
+folder_path = "time serie"
 result_name = f"classification_result/{strain}_CNN_TCN_{case}_{epochs}_{batch}_{kernal_size}.csv"
 
 case_dict = {
@@ -107,13 +108,13 @@ import glob
 from collections import defaultdict
 
 excel_files = [
-    f for f in glob.glob("time serie/*.xlsx") if not f.startswith("~$")
+    f for f in glob.glob("{folder_path}/*.xlsx") if not f.startswith("~$")
 ]
 
 if strain == None:
     pass
 else:
-    excel_files = [f"time serie/{strain} strain.xlsx"]
+    excel_files = [f"{folder_path}/{strain} strain.xlsx"]
 
 X_all, y_all, patients_all = [], [], []
 rows = []
