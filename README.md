@@ -1,29 +1,188 @@
-README
+# 🧬 Growth-Based Classification of COVID-19 Using *E. coli* Metabolic Sensors
 
-This Git repository contains all codes used for classification (prognosis and diagnosis) as well as Generalized Additive Mixed Models (GAMMs) analyses conducted in Ahavi et al. [link biorxiv].
+This repository contains the full codebase used for **prognosis and diagnosis of COVID-19** based on *Escherichia coli* growth dynamics, as well as **statistical analyses using Generalized Additive Mixed Models (GAMMs)**.
 
-Regarding classification models (Python codes): 
+---
 
-(i) "growth_parameters_main" is the code used to perform growth-parameter-based classification. Using on a growth parameter table, it trains four models for each strain in order to perform COVID-19 prognosis and diagnosis: a support vector machine (SVM), a logistic regression model, a gradient-boosted tree model XGBoost, and a soft-voting ensemble combining the three base classifiers.
+## 📄 Reference
 
-(ii) "time_series_model" and time_series_main are the codes used to perform time-series classification. They train a one-dimensional CNN (CNN1D) and a TCN on the raw growth curve for each strain. This code also allows the user to add the first and second derivatives of the raw growth curve as inputs for the model to better capture growth dynamics. Channel-wise z-score normalization can be applied to raw curves and/or derivatives separately.
+**Preprint**
+*Deep learning-based prognosis and diagnosis using* *Escherichia coli* *growth-coupled metabolic sensors*
 
-(iii) "FiLM.model" and "FiLM.main" are the codes used for context-aware classification using Feature-wise Linear Modulation (FiLM). For each strain, FiLM parameters were acquired through a multilayer perceptron fed with the normalized growth parameters. These parameters were then used to modulate the feature maps of the corresponding growth curve through an affine transformation. Two models are trained: a FiLM-CNN1D and a FiLM-TCN. In the FiLM-CNN1D, FiLM is applied after concatenation of the two parallel one-dimensional convolution branches, whereas in the FiLM-TCN, FiLM is applied after the second temporal convolution block.
+---
 
-(iv) "early_fusion_model" and "early_fusion_main" are the codes used for early-fusion multistrain classification. They take as input the input configuration maximizing the balanced accuracy for each strain tested. Each input is a new channel and FiLM using growth parameters can be applied only to the corresponding time series. They then train a CNN1D and a TCN on the combined list of inputs.
+## 🧠 Overview
 
-(v) "late_fusion_model" and "late_fusion_main" are the codes used for late-fusion multistrain classification. For each strain included in the final model, they train separately the submodel maximizing the balanced accuracy. Then they train a weighted soft-voting ensemble model to perform classification. Fusion weights were learned independently within each outer fold in order to prevent data leakage.
+This project explores multiple machine learning and statistical approaches to classify biological conditions from microbial growth data:
 
-Additional design details are available in Ahavi et al. [link biorxiv]. Briefly, a nested patient-level cross-validation strategy with 5 outer folds and 3 inner folds is implemented to prevent data leakage. The same stratified splits are used across all models to ensure comparability. Hyperparameter tuning had balanced accuracy maximization as objective. Optuna was used for time-series hyperparameter search.
+* Growth parameter-based models
+* Time-series deep learning models
+* Context-aware models (FiLM)
+* Multistrain fusion strategies
+* Statistical inference using GAMMs
 
-Concerning GAMMs (R codes):
+All methods are evaluated under a **nested cross-validation framework** to ensure robust and unbiased performance estimates.
 
-(i) GAMM_all_mutants_model_comparison is the code used to select the best model for each classification problem and each screened strain among three candidate models of increasing complexity. The selected model is the one with the lowest Akaike Information Criterion (AIC). For models using basis dimensions (k), each basis dimension is optimized sequentially using the k.check() function. The basis dimension selected was the lowest one from 3 to 20 yielding a k.check() superior to 0.9. If no basis dimension fulfills this condition, then its value was set to 20.
+---
 
-(ii) GAMM_selected_mutants_model_comparison is the code used to select the best model for each classification problem and each strain tested during the validation phase. It relies on the same logic as the GAMM_all_mutants_model_comparison code.
+## 🧪 Python Models (Classification)
 
-(iii) GAMM_all_mutants is the code used to perform the statistical test during mutant screening for each classification problem, based on the model selected by the GAMM_all_mutants_model_comparison code. When two classes are considered statistically different, it computes the time window during which the difference occurs. It also computes the simultaneous 95% confidence bands and the pointwise standard deviation of model-predicted values across replicate/curve units within each group.
+### 1. Growth Parameter-Based Classification
 
-(iv) GAMM_selected_mutants is the code used to perform the statistical test during mutant validation for each classification problem, based on the model selected by the GAMM_selected_mutants_model_comparison code. It follows the same logic as the GAMM_all_mutants code.
+📂 `Growth_parameter_based_classification/`
 
-Additional design details are available in Ahavi et al. [link biorxiv]. The bam() function from the mgcv package (v.1.9.3) was used to fit the growth curves.
+* Input: extracted growth parameters
+
+* Models:
+
+  * Support Vector Machine (SVM)
+  * Logistic Regression
+  * XGBoost
+  * Soft-voting ensemble
+
+* Main script:
+  `growth_parameters_main.py`
+
+---
+
+### 2. Time-Series Classification
+
+📂 `Time_series_classification/`
+
+* Input: raw growth curves
+
+* Models:
+
+  * 1D Convolutional Neural Network (CNN1D)
+  * Temporal Convolutional Network (TCN)
+
+* Optional features:
+
+  * First & second derivatives
+  * Channel-wise normalization
+
+* Scripts:
+
+  * `time_series_main.py`
+  * `time_series_model.py`
+
+---
+
+### 3. FiLM-Based Context-Aware Models
+
+📂 `FiLM/`
+
+* Combines:
+
+  * Growth parameters → conditioning signal
+  * Growth curves → primary input
+
+* Mechanism:
+
+  * Feature-wise Linear Modulation (FiLM)
+  * Parameters generated via MLP
+
+* Models:
+
+  * FiLM-CNN1D
+  * FiLM-TCN
+
+---
+
+### 4. Multistrain Models
+
+📂 `Multistrain_models/`
+
+#### Early Fusion
+
+* Combines multiple strains as multi-channel input
+* Optional FiLM conditioning per strain
+
+#### Late Fusion
+
+* Independent models per strain
+* Weighted soft-voting ensemble
+* Weights learned per fold to avoid leakage
+
+---
+
+## 📊 Model Evaluation Strategy
+
+* Nested cross-validation:
+
+  * 5 outer folds
+  * 3 inner folds
+* Patient-level splitting
+* Shared splits across all models
+* Optimization target: **balanced accuracy**
+* Hyperparameter tuning:
+
+  * Optuna (for time-series models)
+
+---
+
+## 📈 Statistical Analysis (R - GAMMs)
+
+📂 `GAMM models/`
+
+### Model Selection
+
+* Based on **Akaike Information Criterion (AIC)**
+* Basis dimension tuning via `k.check()`
+
+### Scripts
+
+* `GAMM_all_mutants_model_comparison.R`
+* `GAMM_selected_mutants_model_comparison.R`
+
+→ Select best model per strain and classification task
+
+* `GAMM_all_mutants.R`
+* `GAMM_selected_mutants.R`
+
+→ Perform statistical testing:
+
+* Detect differences between conditions
+* Identify significant time windows
+* Compute confidence intervals
+
+### Technical details
+
+* Fitted using `mgcv::bam()` (v1.9.3)
+* Includes:
+
+  * Simultaneous 95% confidence bands
+  * Pointwise variance estimation
+
+---
+
+## 📁 Repository Structure
+
+```
+FiLM/
+GAMM models/
+Growth_parameter_based_classification/
+Multistrain_models/
+Time_series_classification/
+```
+
+Each folder contains:
+
+* Model scripts
+* Data inputs (parameters or time series)
+* Cross-validation splits
+
+---
+
+## ⚠️ Notes
+
+* RStudio-generated files (`.Rproj.user`, `.RData`, `.Rhistory`) are excluded from version control
+* Excel files correspond to experimental datasets used in the study
+* Splits are shared across all models to ensure fair comparison
+
+---
+
+## 📬 Contact
+
+**Paul Ahavi**
+📧 [paul.ahavi@inrae.fr](mailto:paul.ahavi@inrae.fr)
