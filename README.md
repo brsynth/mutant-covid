@@ -1,4 +1,4 @@
-# 🧬 Growth-Based Classification of COVID-19 Using *E. coli* Metabolic Sensors
+# 🧬 Deep learning-based prognosis and diagnosis using Escherichia coli growth-coupled metabolic sensors
 
 This repository contains the full codebase used for **prognosis and diagnosis of COVID-19** based on *Escherichia coli* growth dynamics, as well as **statistical analyses using Generalized Additive Mixed Models (GAMMs)**.
 
@@ -7,7 +7,7 @@ This repository contains the full codebase used for **prognosis and diagnosis of
 ## 📄 Reference
 
 **Preprint**
-*Deep learning-based prognosis and diagnosis using* *Escherichia coli* *growth-coupled metabolic sensors*
+*Deep learning-based prognosis and diagnosis using Escherichia coli growth-coupled metabolic sensors*
 
 ---
 
@@ -184,5 +184,6 @@ Each folder contains:
 
 ## 📬 Contact
 
-**Paul Ahavi**
-📧 [paul.ahavi@inrae.fr](mailto:paul.ahavi@inrae.fr)
+* **Paul Ahavi** 📧 [paul.ahavi228@gmail.com](mailto:paul.ahavi228@gmail.com)
+
+* **Jean-Loup Faulon** 📧 [jean-loup.faulon@inrae.fr](mailto:jean-loup.faulon@inrae.fr)
