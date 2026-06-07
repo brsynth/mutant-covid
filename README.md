@@ -1,4 +1,4 @@
-# 🧬 Deep learning-based prognosis and diagnosis using Escherichia coli growth-coupled metabolic sensors
+# 🧬 Deep Learning-Based Prognosis and Diagnosis Using *Escherichia coli* Growth-Coupled Metabolic Sensors
 
 This repository contains the full codebase used for **prognosis and diagnosis of COVID-19** based on *Escherichia coli* growth dynamics, as well as **statistical analyses using Generalized Additive Mixed Models (GAMMs)**.
 
@@ -7,41 +7,51 @@ This repository contains the full codebase used for **prognosis and diagnosis of
 ## 📄 Reference
 
 **Preprint**
-*Deep learning-based prognosis and diagnosis using Escherichia coli growth-coupled metabolic sensors*
+*Deep Learning-Based Prognosis and Diagnosis Using Escherichia coli Growth-Coupled Metabolic Sensors*
 
 ---
 
 ## 🧠 Overview
 
-This project explores multiple machine learning and statistical approaches to classify biological conditions from microbial growth data:
+This project explores multiple machine learning and statistical approaches to classify biological conditions from microbial growth data.
 
-* Growth parameter-based models
+The repository includes:
+
+* Growth parameter-based classification models
 * Time-series deep learning models
-* Context-aware models (FiLM)
+* Context-aware models using Feature-wise Linear Modulation (FiLM)
 * Multistrain fusion strategies
-* Statistical inference using GAMMs
+* Statistical inference using Generalized Additive Mixed Models (GAMMs)
 
-All methods are evaluated under a **nested cross-validation framework** to ensure robust and unbiased performance estimates.
+All classification methods are evaluated under a **nested cross-validation framework** to ensure robust and unbiased performance estimates.
 
 ---
 
-## 🧪 Python Models (Classification)
+## 🧪 Python Models for Classification
 
 ### 1. Growth Parameter-Based Classification
 
-📂 `Growth_parameter_based_classification/`
+📂 `Growth_parameter_based_classification/Two parameters/`
 
-* Input: extracted growth parameters
+This module performs classification using extracted growth parameters.
 
-* Models:
+#### Input
 
-  * Support Vector Machine (SVM)
-  * Logistic Regression
-  * XGBoost
-  * Soft-voting ensemble
+* Extracted growth parameters from *E. coli* growth curves
+* Two-parameter representations of growth dynamics
 
-* Main script:
-  `growth_parameters_main.py`
+#### Models
+
+* Support Vector Machine (SVM)
+* Logistic Regression
+* XGBoost
+* Soft-voting ensemble
+
+#### Main script
+
+```bash
+Growth_parameter_based_classification/Two parameters/growth_parameters_main.py
+```
 
 ---
 
@@ -49,22 +59,29 @@ All methods are evaluated under a **nested cross-validation framework** to ensur
 
 📂 `Time_series_classification/`
 
-* Input: raw growth curves
+This module performs classification directly from raw growth curves.
 
-* Models:
+#### Input
 
-  * 1D Convolutional Neural Network (CNN1D)
-  * Temporal Convolutional Network (TCN)
+* Raw microbial growth time series
 
-* Optional features:
+#### Models
 
-  * First & second derivatives
-  * Channel-wise normalization
+* 1D Convolutional Neural Network (CNN1D)
+* Temporal Convolutional Network (TCN)
 
-* Scripts:
+#### Optional features
 
-  * `time_series_main.py`
-  * `time_series_model.py`
+* First derivatives of growth curves
+* Second derivatives of growth curves
+* Channel-wise normalization
+
+#### Scripts
+
+```bash
+Time_series_classification/time_series_main.py
+Time_series_classification/time_series_model.py
+```
 
 ---
 
@@ -72,20 +89,21 @@ All methods are evaluated under a **nested cross-validation framework** to ensur
 
 📂 `FiLM/`
 
-* Combines:
+This module implements context-aware neural networks using **Feature-wise Linear Modulation (FiLM)**.
 
-  * Growth parameters → conditioning signal
-  * Growth curves → primary input
+#### Principle
 
-* Mechanism:
+FiLM models combine:
 
-  * Feature-wise Linear Modulation (FiLM)
-  * Parameters generated via MLP
+* Growth curves as the primary input
+* Growth parameters as contextual conditioning variables
 
-* Models:
+The conditioning signal is used to generate feature-wise modulation parameters through a multilayer perceptron.
 
-  * FiLM-CNN1D
-  * FiLM-TCN
+#### Models
+
+* FiLM-CNN1D
+* FiLM-TCN
 
 ---
 
@@ -93,72 +111,105 @@ All methods are evaluated under a **nested cross-validation framework** to ensur
 
 📂 `Multistrain_models/`
 
-#### Early Fusion
+This module implements classification strategies combining information from multiple *E. coli* strains.
 
-* Combines multiple strains as multi-channel input
-* Optional FiLM conditioning per strain
+### Early Fusion
 
-#### Late Fusion
+* Combines multiple strains as a multi-channel input
+* Supports optional FiLM conditioning per strain
 
-* Independent models per strain
-* Weighted soft-voting ensemble
-* Weights learned per fold to avoid leakage
+### Late Fusion
+
+* Trains independent models for each strain
+* Combines predictions using a weighted soft-voting ensemble
+* Learns weights within each fold to avoid data leakage
 
 ---
 
 ## 📊 Model Evaluation Strategy
 
-* Nested cross-validation:
+All machine learning models are evaluated using a nested cross-validation strategy.
 
-  * 5 outer folds
-  * 3 inner folds
+### Cross-validation design
+
+* 5 outer folds
+* 3 inner folds
 * Patient-level splitting
-* Shared splits across all models
-* Optimization target: **balanced accuracy**
-* Hyperparameter tuning:
+* Shared splits across models whenever applicable
 
-  * Optuna (for time-series models)
+### Optimization
+
+* Main optimization target: **balanced accuracy**
+* Hyperparameter tuning performed with Optuna for time-series models
+
+This strategy ensures that model selection and final performance estimation remain properly separated.
 
 ---
 
-## 📈 Statistical Analysis (R - GAMMs)
+## 📈 Statistical Analysis with GAMMs
 
 📂 `GAMM models/`
 
+This folder contains the R scripts used for statistical analysis with **Generalized Additive Mixed Models (GAMMs)**.
+
+---
+
 ### Model Selection
 
-* Based on **Akaike Information Criterion (AIC)**
-* Basis dimension tuning via `k.check()`
+Model selection is based on:
 
-### Scripts
+* Akaike Information Criterion (AIC)
+* Basis dimension diagnostics using `k.check()`
 
-* `GAMM_all_mutants_model_comparison.R`
-* `GAMM_selected_mutants_model_comparison.R`
+#### Scripts
 
-→ Select best model per strain and classification task
+```bash
+GAMM_all_mutants_model_comparison.R
+GAMM_selected_mutants_model_comparison.R
+```
 
-* `GAMM_all_mutants.R`
-* `GAMM_selected_mutants.R`
+These scripts select the best model for each strain and classification task.
 
-→ Perform statistical testing:
+---
 
-* Detect differences between conditions
+### Statistical Testing
+
+#### Scripts
+
+```bash
+GAMM_all_mutants.R
+GAMM_selected_mutants.R
+```
+
+These scripts are used to:
+
+* Detect differences between biological conditions
 * Identify significant time windows
 * Compute confidence intervals
 
-### Technical details
+---
 
-* Fitted using `mgcv::bam()` (v1.9.3)
-* Includes:
+### Technical Details
 
-  * Simultaneous 95% confidence bands
-  * Pointwise variance estimation
+Models are fitted using:
+
+```r
+mgcv::bam()
+```
+
+with `mgcv` version 1.9.3.
+
+The statistical analysis includes:
+
+* Simultaneous 95% confidence bands
+* Pointwise variance estimation
+* Time-dependent comparison between experimental conditions
 
 ---
 
 ## 📁 Repository Structure
 
-```
+```text
 FiLM/
 GAMM models/
 Growth_parameter_based_classification/
@@ -166,24 +217,23 @@ Multistrain_models/
 Time_series_classification/
 ```
 
-Each folder contains:
-
-* Model scripts
-* Data inputs (parameters or time series)
-* Cross-validation splits
+Each folder contains the corresponding scripts, input data, and cross-validation split files required to reproduce the analyses.
 
 ---
 
 ## ⚠️ Notes
 
-* RStudio-generated files (`.Rproj.user`, `.RData`, `.Rhistory`) are excluded from version control
-* Excel files correspond to experimental datasets used in the study
-* Splits are shared across all models to ensure fair comparison
+* RStudio-generated files such as `.Rproj.user`, `.RData`, and `.Rhistory` are excluded from version control.
+* Excel files correspond to experimental datasets used in the study.
+* Cross-validation splits are shared across models whenever applicable to ensure fair comparison.
+* Growth parameter-based classification currently uses the `Two parameters` implementation.
 
 ---
 
 ## 📬 Contact
 
-* **Paul Ahavi** 📧 [paul.ahavi228@gmail.com](mailto:paul.ahavi228@gmail.com)
+* **Paul Ahavi**
+  📧 [paul.ahavi228@gmail.com](mailto:paul.ahavi228@gmail.com)
 
-* **Jean-Loup Faulon** 📧 [jean-loup.faulon@inrae.fr](mailto:jean-loup.faulon@inrae.fr)
+* **Jean-Loup Faulon**
+  📧 [jean-loup.faulon@inrae.fr](mailto:jean-loup.faulon@inrae.fr)
