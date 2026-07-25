@@ -1,4 +1,4 @@
-# 🧬 Deep Learning-Based Prognosis and Diagnosis Using *Escherichia coli* Growth-Coupled Metabolic Sensors
+# 🧬 Engineering growth-coupled metabolic biosensors for disease prognosis and diagnosis using full growth trajectories
 
 This repository contains the full codebase used for **prognosis and diagnosis of COVID-19** based on *Escherichia coli* growth dynamics, as well as **statistical analyses using Generalized Additive Mixed Models (GAMMs)**.
 
@@ -6,8 +6,8 @@ This repository contains the full codebase used for **prognosis and diagnosis of
 
 ## 📄 Reference
 
-**Preprint**
-*Deep Learning-Based Prognosis and Diagnosis Using Escherichia coli Growth-Coupled Metabolic Sensors*
+**Preprint**.
+*Engineering growth-coupled metabolic biosensors for disease prognosis and diagnosis using full growth trajectories*. Ahavi P., Hoang A., Meyer P., Epaulard O., Le Gouellec A., Faulon J.-L.
 
 ---
 
